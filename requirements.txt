@@ -1,0 +1,2 @@
+# Runtime dependencies (also deployed to Lambda layer)
+# No third-party packages required for the core – standard library only.

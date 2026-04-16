@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Inspirational Quote Generator – Lambda + API Gateway + EventBridge
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Handler: handler
+    Timeout: 10
+    MemorySize: 128
+    Environment:
+      Variables:
+        LOG_LEVEL: !Ref LogLevel
+    Layers:
+      - !Ref DependenciesLayer
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Deployment environment stage
+
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR]
+    Description: Lambda log level
+
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 8 * * ? *)"
+    Description: EventBridge cron expression for the daily quote scheduler (UTC)
+
+Resources:
+  # ── Dependencies layer ──────────────────────────────────────────────────────
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "quote-generator-deps-${Stage}"
+      Description: Python runtime dependencies
+      ContentUri: layer/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Delete
+
+  # ── API function ────────────────────────────────────────────────────────────
+  QuoteApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "quote-generator-api-${Stage}"
+      CodeUri: src/
+      Handler: handlers.api.handler
+      Description: Returns inspirational quotes via REST API
+      Policies:
+        - CloudWatchLogsFullAccess
+      Events:
+        RandomQuote:
+          Type: Api
+          Properties:
+            RestApiId: !Ref QuoteApi
+            Path: /quote
+            Method: GET
+        Categories:
+          Type: Api
+          Properties:
+            RestApiId: !Ref QuoteApi
+            Path: /quote/categories
+            Method: GET
+        Authors:
+          Type: Api
+          Properties:
+            RestApiId: !Ref QuoteApi
+            Path: /quote/authors
+            Method: GET
+        Tags:
+          Type: Api
+          Properties:
+            RestApiId: !Ref QuoteApi
+            Path: /quote/tags
+            Method: GET
+        Health:
+          Type: Api
+          Properties:
+            RestApiId: !Ref QuoteApi
+            Path: /health
+            Method: GET
+        OptionsQuote:
+          Type: Api
+          Properties:
+            RestApiId: !Ref QuoteApi
+            Path: /quote
+            Method: OPTIONS
+
+  # ── Scheduler function ──────────────────────────────────────────────────────
+  QuoteSchedulerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "quote-generator-scheduler-${Stage}"
+      CodeUri: src/
+      Handler: handlers.scheduler.handler
+      Description: Logs a daily inspirational quote via EventBridge schedule
+      Policies:
+        - CloudWatchLogsFullAccess
+      Events:
+        DailyQuote:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Name: !Sub "daily-quote-${Stage}"
+            Description: Triggers the daily quote generator
+            Enabled: true
+
+  # ── API Gateway ─────────────────────────────────────────────────────────────
+  QuoteApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "quote-generator-api-${Stage}"
+      StageName: !Ref Stage
+      Description: Inspirational Quote Generator REST API
+      Cors:
+        AllowMethods: "'GET,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'"
+
+  # ── CloudWatch Log Groups ───────────────────────────────────────────────────
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/quote-generator-api-${Stage}"
+      RetentionInDays: 30
+
+  SchedulerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/quote-generator-scheduler-${Stage}"
+      RetentionInDays: 30
+
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL for the Quote Generator API
+    Value: !Sub "https://${QuoteApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+
+  ApiQuoteEndpoint:
+    Description: Random quote endpoint
+    Value: !Sub "https://${QuoteApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/quote"
+
+  QuoteApiFunctionArn:
+    Description: API Lambda function ARN
+    Value: !GetAtt QuoteApiFunction.Arn
+
+  QuoteSchedulerFunctionArn:
+    Description: Scheduler Lambda function ARN
+    Value: !GetAtt QuoteSchedulerFunction.Arn
