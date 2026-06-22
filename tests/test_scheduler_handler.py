@@ -41,3 +41,9 @@ def test_scheduler_is_callable_multiple_times():
     for _ in range(5):
         result = handler(_scheduled_event(), context=None)
         assert result["statusCode"] == 200
+
+
+def test_scheduler_reports_notification_status(monkeypatch):
+    monkeypatch.delenv("NOTIFY_WEBHOOK_URL", raising=False)
+    result = handler(_scheduled_event(), context=None)
+    assert result["notified"] is False
