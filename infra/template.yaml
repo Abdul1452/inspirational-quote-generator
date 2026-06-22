@@ -32,6 +32,11 @@ Parameters:
     Default: "cron(0 8 * * ? *)"
     Description: EventBridge cron expression for the daily quote scheduler (UTC)
 
+  NotifyWebhookUrl:
+    Type: String
+    Default: ""
+    Description: Slack/Discord incoming webhook URL for the daily quote (optional)
+
 Resources:
   # ── Dependencies layer ──────────────────────────────────────────────────────
   DependenciesLayer:
@@ -99,7 +104,10 @@ Resources:
       FunctionName: !Sub "quote-generator-scheduler-${Stage}"
       CodeUri: src/
       Handler: handlers.scheduler.handler
-      Description: Logs a daily inspirational quote via EventBridge schedule
+      Description: Logs and delivers a daily inspirational quote via EventBridge schedule
+      Environment:
+        Variables:
+          NOTIFY_WEBHOOK_URL: !Ref NotifyWebhookUrl
       Policies:
         - CloudWatchLogsFullAccess
       Events:
