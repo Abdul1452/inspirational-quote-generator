@@ -1,7 +1,8 @@
-"""AWS Lambda handler for EventBridge scheduled rule.
+"""AWS Lambda handler for the EventBridge scheduled rule.
 
-Generates a random inspirational quote and logs it as a structured CloudWatch
-log entry.  Can be extended to deliver via SNS, SES, Slack, etc.
+Generates a random inspirational quote, logs it as a structured CloudWatch log
+entry, and delivers it to an incoming webhook (Slack/Discord) when one is
+configured via ``NOTIFY_WEBHOOK_URL``.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from typing import Any, Dict
 
 from src.quotes.service import QuoteService
 from src.utils.logger import get_logger
+from src.utils.notifier import send_quote_notification
 
 logger = get_logger(__name__)
 
@@ -36,10 +38,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         quote_tags=quote.tags,
     )
 
+    delivered = send_quote_notification(quote)
+
     elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
-    logger.info("Scheduler run complete", elapsed_ms=elapsed_ms)
+    logger.info("Scheduler run complete", delivered=delivered, elapsed_ms=elapsed_ms)
 
     return {
         "statusCode": 200,
         "quote": quote.to_dict(),
+        "notified": delivered,
     }
