@@ -1,6 +1,6 @@
 # Inspirational Quote Generator
 
-A serverless application that delivers random inspirational quotes via a REST API and a daily scheduled notification, running on AWS Lambda.
+A serverless application that delivers random inspirational quotes via a REST API and a daily scheduled notification — pushed to a Slack or Discord webhook — running on AWS Lambda.
 
 ---
 
@@ -56,11 +56,13 @@ inspirational-quote-generator/
 │   │   └── scheduler.py     Lambda handler – EventBridge schedule
 │   └── utils/
 │       ├── logger.py        Structured JSON logger (CloudWatch-friendly)
+│       ├── notifier.py      Webhook delivery (Slack/Discord, stdlib only)
 │       └── response.py      HTTP response helpers
 ├── tests/
 │   ├── test_models.py
 │   ├── test_service.py
 │   ├── test_api_handler.py
+│   ├── test_notifier.py
 │   └── test_scheduler_handler.py
 ├── infra/
 │   ├── template.yaml        AWS SAM CloudFormation template
@@ -177,6 +179,23 @@ Outputs:
 | `Stage`              | `dev`                | Deployment stage (`dev` or `prod`)               |
 | `LogLevel`           | `INFO`               | Lambda log level                                 |
 | `ScheduleExpression` | `cron(0 8 * * ? *)` | EventBridge schedule (daily 08:00 UTC by default)|
+| `NotifyWebhookUrl`   | `""` (disabled)      | Slack/Discord incoming webhook for the daily quote|
+
+---
+
+## Notifications
+
+When `NOTIFY_WEBHOOK_URL` is set, the daily scheduler posts each quote to that
+incoming webhook (Slack- and Discord-compatible) using only the Python standard
+library. Delivery is best-effort: if the webhook is unreachable the error is
+logged and the Lambda still succeeds. Leave the variable unset to disable
+delivery — the quote is still written to CloudWatch.
+
+Set it locally in `.env` (see `.env.example`), or at deploy time:
+
+```bash
+sam deploy --parameter-overrides NotifyWebhookUrl=https://hooks.slack.com/services/XXX/YYY/ZZZ
+```
 
 ---
 
